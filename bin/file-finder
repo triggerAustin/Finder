@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+:'
+This file contains a script that invokes plocate to help find files and/or folders  in the system within /
+it pipes the stdout to rofi
+clicking on a result invokes a terminal instance and cd's into the location of the result
+'
