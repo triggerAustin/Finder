@@ -1,6 +1,80 @@
 #!/usr/bin/env bash
-:'
-This file contains a script that invokes plocate to help find files and/or folders  in the system within /
-it pipes the stdout to rofi
-clicking on a result invokes a terminal instance and cd's into the location of the result
-'
+: '
+ this is the entry script to the file finder tool, it has validations for history file, calls to plocate, and other relevant sys calls, 
+it invokes cmd prompts relevant
+sends output to rofi amd is called by rofi via rofis script feature
+ '
+
+history_file="$HOME/Projects/Finder/data/history.db"
+history_meta="./data/history.meta"
+user_query="$1"
+rofi_action="${ROFI_RETV}"
+
+# create history db with sqlite3
+sqlite3 "$history_file" <<EOF
+CREATE TABLE IF NOT EXISTS history (
+  cmd TEXT,
+  path TEXT,
+  last_visited INTEGER,
+  freq_7d INTEGER,
+  last_week INTEGER,
+  freq_30d INTEGER,
+  last_month INTEGER,
+  PRIMARY KEY (cmd, path)
+);
+EOF
+
+#check if history.meta exists create if doesnt
+if [[ ! -f ${history_meta} ]]; then
+  #file doesnt exists
+  touch ${history_meta}
+fi
+
+#function to get history data line by line
+display_history() {
+  # if rofi_acton is 0 display history only
+  if [[ $rofi_action == 0 ]]; then
+    sqlite3 "${history_file}" -cmd '.separator "\t"' \
+      "SELECT cmd, path, datetime(last_visited, 'unixepoch', 'localtime'), freq_7d, freq_30d FROM history;" |
+      awk -F'\t' '{
+      path = $2
+      if (length(path) > 40) {
+        path = "..." substr(path, length(path) - 36)
+      }
+      printf "%s\t%s\t%s\t%s\t%s\n", $1, path, $3, $4, $5
+    }'
+  else
+    # get both plocate output on query and filter history by query
+    sqlite3 "${history_file}" -cmd '.separator "\t"' \
+      "SELECT cmd, path, datetime(last_visited, 'unixepoch', 'localtime'), freq_7d, freq_30d FROM history WHERE path LIKE '%${user_query}%';" |
+      awk -F'\t' '{
+        path = $2
+        if (length(path) > 40) {
+          path = "..." substr(path, length(path) - 36)
+        }
+        printf "%s\t%s\t%s\t%s\t%s\n", $1, path, $3, $4, $5
+    }'
+
+    fd "$user_query" "$HOME" | while IFS= read -r p; do
+      if ! grep -qxF "$p" <<<"$history_paths"; then
+        display_path="$p"
+        if [[ ${#display_path} -gt 40 ]]; then
+          display_path="...${display_path: -36}"
+        fi
+        printf "%s\t%s\t%s\t%s\t%s\n" "-" "$display_path" "-" "-" "-"
+      fi
+    done
+  fi
+}
+
+echo -e 'COMMAND\tPATH\tLAST_VISIT\tFREQ7\tFREQ30'
+
+if [[ ${rofi_action} == 1 ]]; then
+  #invoke a command on the selected rows path
+  echo "2" >>${history_meta}
+  echo ${1} >>${history_meta}
+
+else
+  #if rofi_action is not 1 find via plocate and display both history and plocate output
+  display_history
+fi
