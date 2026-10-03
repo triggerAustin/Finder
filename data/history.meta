@@ -5,3 +5,43 @@
 COMMAND PATH LAST_VISIT FREQ7 FREQ30
 2
 COMMAND PATH LAST_VISIT FREQ7 FREQ30
+2
+nvim /tmp/test.txt 2023-09-29 18:06:40 1 1
+2
+nvim /tmp/test.txt 2023-09-29 18:06:40 1 1[0]
+7
+
+2
+
+
+nvim /tmp/test.txt 2023-09-29 18:06:40 1 1
+
+nvim ...modules/has-property-descriptors/test 2026-10-03 11:16:46 5 12
+~/Projects/kit-kat/node_modules/has-property-descriptors/test
+nvim ~/Projects/kit-kat/node_modules/has-property-descriptors/test 2026-10-03 11:11:48 5 12
+0
+1
+/tmp/test.txt
+niokj /tmp/test.txt 2023-09-29 18:06:40 1 1
+0
+0
+1
+/home/penality/Projects/kit-kat/node_modules/has-property-descriptors/test
+nvim ~/.../has-property-descriptors/test 2026-10-03 11:16:46 5 12
+0
+0
+0
+2
+0
+2
+1
+/home/penality/go/pkg/sumdb/sum.golang.org/latest
+- ~/.../sum.golang.org/latest - - -
+0
+2
+2
+0
+2
+1
+~/Projects/kit-kat/node_modules/has-property-descriptors/test
+nvim ~/.../has-property-descriptors/test 2026-10-03 11:11:48 5 12

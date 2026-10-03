@@ -30,51 +30,95 @@ if [[ ! -f ${history_meta} ]]; then
   touch ${history_meta}
 fi
 
+shorten_awk='
+      function shorten(p,   n, a, head, tail, room, home) {
+        home = ENVIRON["HOME"]
+        if (home != "" && index(p, home "/") == 1) p = "~" substr(p, length(home) + 1)
+
+        n = split(p, a, "/")
+        if (a[1] == "~") {
+          if (n <= 4) head = ""
+          else        head = "~/.../"
+       } else {
+          if (n <= 4) head = ""
+          else        head = "/" a[2] "/" a[3] "/.../"
+       }
+
+        if (head == "") {
+          if (length(p) > 50) return "..." substr(p, length(p) - 46)
+         return p
+       }
+
+        tail = a[n-1] "/" a[n]
+        room = 50 - length(head)
+        if (length(tail) > room) tail = "..." substr(tail, length(tail) - room + 4)
+        return head tail
+     }'
+
 #function to get history data line by line
 display_history() {
   # if rofi_acton is 0 display history only
   if [[ $rofi_action == 0 ]]; then
-    sqlite3 "${history_file}" -cmd '.separator "\t"' \
-      "SELECT cmd, path, datetime(last_visited, 'unixepoch', 'localtime'), freq_7d, freq_30d FROM history;" |
-      awk -F'\t' '{
-      path = $2
-      if (length(path) > 40) {
-        path = "..." substr(path, length(path) - 36)
-      }
-      printf "%s\t%s\t%s\t%s\t%s\n", $1, path, $3, $4, $5
+    sqlite3 "$history_file" -separator $'\t' \
+      "SELECT cmd, path, datetime(last_visited, 'unixepoch', 'localtime'), freq_7d, freq_30d
+   FROM history
+   ORDER BY freq_7d DESC, freq_30d DESC, last_visited DESC;" |
+      gawk -F'\t' "$shorten_awk"'
+    {
+      printf "%-10s  %-50.50s  %-19s  %6s  %6s\0info\x1f%s\x1fmeta\x1f%s\n",
+             $1, shorten($2), $3, $4, $5, $2, $2
     }'
-  else
-    # get both plocate output on query and filter history by query
-    sqlite3 "${history_file}" -cmd '.separator "\t"' \
-      "SELECT cmd, path, datetime(last_visited, 'unixepoch', 'localtime'), freq_7d, freq_30d FROM history WHERE path LIKE '%${user_query}%';" |
-      awk -F'\t' '{
-        path = $2
-        if (length(path) > 40) {
-          path = "..." substr(path, length(path) - 36)
-        }
-        printf "%s\t%s\t%s\t%s\t%s\n", $1, path, $3, $4, $5
-    }'
+  elif [[ $rofi_action == 2 ]]; then
+    q_sql=${user_query//\'/\'\'}
+    hist_tmp=$(mktemp)
+    fd_tmp=$(mktemp)
 
-    fd "$user_query" "$HOME" | while IFS= read -r p; do
-      if ! grep -qxF "$p" <<<"$history_paths"; then
-        display_path="$p"
-        if [[ ${#display_path} -gt 40 ]]; then
-          display_path="...${display_path: -36}"
-        fi
-        printf "%s\t%s\t%s\t%s\t%s\n" "-" "$display_path" "-" "-" "-"
-      fi
-    done
+    sqlite3 "$history_file" -separator $'\t' \
+      "SELECT cmd, path, datetime(last_visited, 'unixepoch', 'localtime'), freq_7d, freq_30d
+       FROM history
+       WHERE instr(lower(path), lower('${q_sql}')) > 0
+       ORDER BY freq_7d DESC, freq_30d DESC, last_visited DESC;" |
+      gawk -F'\t' "$shorten_awk"'
+        {
+          printf "%-10s  %-50.50s  %-19s  %6s  %6s\0info\x1f%s\x1fmeta\x1f%s\n",
+                 $1, shorten($2), $3, $4, $5, $2, $2
+        }' >"$hist_tmp"
+
+    fd -F -i -- "$user_query" "$HOME" |
+      gawk "$shorten_awk"'
+        ARGIND == 1 { seen[$0] = 1; next }
+        !($0 in seen) {
+          printf "%-10s  %-50.50s  %-19s  %6s  %6s\0info\x1f%s\x1fmeta\x1f%s\n",
+                 "-", shorten($0), "-", "-", "-", $0, $0
+        }
+      ' <(printf '%s\n' "$history_paths") - >"$fd_tmp"
+
+    hist_count=$(tr -cd '\n' <"$hist_tmp" | wc -c)
+    fd_count=$(tr -cd '\n' <"$fd_tmp" | wc -c)
+
+    if ((hist_count + fd_count == 0)); then
+      printf '\0message\x1fNo results for "%s"\n' "$user_query"
+      printf 'Nothing found\0nonselectable\x1ftrue\n'
+    else
+      printf '\0message\x1f%d in history, %d from fd for "%s"\n' \
+        "$hist_count" "$fd_count" "$user_query"
+      cat "$hist_tmp" "$fd_tmp"
+    fi
+
+    rm -f "$hist_tmp" "$fd_tmp"
   fi
 }
 
-echo -e 'COMMAND\tPATH\tLAST_VISIT\tFREQ7\tFREQ30'
+printf "%-10s  %-50s  %-19s  %3s  %3s\0nonselectable\x1ftrue\x1fpermanent\x1ftrue\n" \
+  "CMD" "PATH" "LAST VISIT" "FREQ_7D" "FREQ_30D"
 
+echo ${rofi_action} >>${history_meta}
 if [[ ${rofi_action} == 1 ]]; then
-  #invoke a command on the selected rows path
-  echo "2" >>${history_meta}
+  #invoke a command on the selected rows pat
+  echo ${ROFI_INFO} >>${history_meta}
   echo ${1} >>${history_meta}
-
 else
   #if rofi_action is not 1 find via plocate and display both history and plocate output
   display_history
+
 fi
